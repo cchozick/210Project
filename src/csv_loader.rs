@@ -1,40 +1,39 @@
-pub mod csv_loader {
-    use std::collections::HashMap;
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
+use crate::graph_analysis::CollaborationGraph;
+use std::error::Error;
 
-    pub fn parse_csv(file_path: &str) -> Result<HashMap<String, Vec<(String, usize)>>, Box<dyn std::error::Error>> {
-        let file = File::open(file_path)?;
-        let reader = BufReader::new(file);
-        let mut graph_data: HashMap<String, Vec<(String, usize)>> = HashMap::new();
 
-        for (i, line) in reader.lines().enumerate() {
-            let line = line?;
-            if i == 0 {
-                continue; 
-            }
+pub fn populate_graph_from_csv(file_path: &str, graph: &mut CollaborationGraph) -> Result<(), Box<dyn Error>> {
+   let mut reader = csv::Reader::from_path(file_path)?;
 
-            let parts: Vec<&str> = line.split(',').collect();
-            if parts.len() >= 15 {
-                let movie = parts[0].trim().to_string();
-                let director = parts[8].trim().to_string();
-                let star = parts[9].trim().to_string();
-                let genre = parts[2].trim().to_string();
-                let score: f64 = parts[5].trim().parse().unwrap_or(0.0);
-                let votes: f64 = parts[6].trim().parse().unwrap_or(0.0);
 
-                let weight = (score * votes) as usize; 
-                graph_data.entry(movie.clone()).or_insert_with(Vec::new).push((director.clone(), weight));
-                graph_data.entry(movie.clone()).or_insert_with(Vec::new).push((star.clone(), weight));
-                graph_data.entry(movie.clone()).or_insert_with(Vec::new).push((genre.clone(), weight));
+   for result in reader.records() {
+       let record: csv::StringRecord = result?;
+      
+       let _movie = record.get(0).unwrap_or("").to_lowercase();
+       let director = record.get(7).unwrap_or("").to_lowercase();
+       let star = record.get(9).unwrap_or("").to_lowercase();
+       let score: f64 = record.get(5).unwrap_or("0.0").parse().unwrap_or(0.0);
 
-                graph_data.entry(director.clone()).or_insert_with(Vec::new).push((movie.clone(), weight));
-                graph_data.entry(star.clone()).or_insert_with(Vec::new).push((movie.clone(), weight));
-                graph_data.entry(genre.clone()).or_insert_with(Vec::new).push((movie.clone(), weight));
-            }
-        }
 
-        Ok(graph_data)
-    }
+       if director.is_empty() {
+           eprintln!("Skipping row due to missing director: {:?}", record);
+           continue;
+       }
+       if star.is_empty() {
+           eprintln!("Skipping row due to missing actor: {:?}", record);
+           continue;
+       }
+
+
+       println!(
+           "Adding collaboration: Actor = {}, Director = {}, Score = {:.2}",
+           star, director, score
+       );
+
+
+       graph.add_edge(&star, &director, score);
+   }
+
+
+   Ok(())
 }
-

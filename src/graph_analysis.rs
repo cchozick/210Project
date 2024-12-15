@@ -1,110 +1,73 @@
-pub mod graph_analysis {
-    use std::collections::{HashMap, HashSet};
-
-    pub struct Graph {
-        pub adjacency_list: HashMap<String, Vec<(String, usize)>>,
-    }
-
-    impl Graph {
-        pub fn new() -> Self {
-            Self {
-                adjacency_list: HashMap::new(),
-            }
-        }
-
-        pub fn from_data(data: HashMap<String, Vec<(String, usize)>>) -> Self {
-            Self {
-                adjacency_list: data,
-            }
-        }
-
-        pub fn add_node(&mut self, node: String) {
-            self.adjacency_list.entry(node).or_insert(Vec::new());
-        }
-
-        pub fn add_edge(&mut self, from: String, to: String, weight: usize) {
-            self.adjacency_list
-                .get(&movie) 
-                .and_then(|neighbors| {
-                    neighbors.iter().find(|(node, _)| {
-                        node.as_str() == actor || node.as_str() == director
-                    })
-                })
-                .map(|(_, weight)| *weight as f64)
+use petgraph::graph::{Graph, NodeIndex};
+use petgraph::Undirected;
+use std::collections::HashMap;
 
 
-        pub fn analyze_connected_nodes(&self, node: &str) {
-            if let Some(neighbors) = self.adjacency_list.get(node) {
-                println!("\nConnections for '{}':", node);
-                for (neighbor, weight) in neighbors {
-                    println!("- {} (weight: {})", neighbor, weight);
-                }
-            } else {
-                println!("\nNode '{}' not found in the graph.", node);
-            }
-        }
-    }
-    
-        pub fn calculate_total_weight(&self, node: &str) -> usize {
-            if let Some(neighbors) = self.adjacency_list.get(node) {
-                neighbors.iter().map(|(_, weight)| weight).sum()
-            } else {
-                0
-            }
-        }
+#[derive(Debug)]
+pub struct CollaborationGraph {
+   graph: Graph<String, f64, Undirected>,
+   node_map: HashMap<String, NodeIndex>,
+}
 
-        pub fn detect_communities(&self) -> Vec<Vec<String>> {
-            let mut visited = HashSet::new();
-            let mut communities = Vec::new();
 
-            for node in self.adjacency_list.keys() {
-                if !visited.contains(node) {
-                    let mut community = Vec::new();
-                    self.dfs_collect(node, &mut visited, &mut community);
-                    communities.push(community);
-                }
-            }
+impl CollaborationGraph {
+   pub fn new() -> Self {
+       Self {
+           graph: Graph::new_undirected(),
+           node_map: HashMap::new(),
+       }
+   }
 
-            communities
-        }
 
-        fn dfs_collect(&self, node: &str, visited: &mut HashSet<String>, community: &mut Vec<String>) {
-            if visited.contains(node) {
-                return;
-            }
+   fn add_node(&mut self, name: &str) -> NodeIndex {
+       if let Some(&index) = self.node_map.get(name) {
+           index
+       } else {
+           let index = self.graph.add_node(name.to_string());
+           self.node_map.insert(name.to_string(), index);
+           index
+       }
+   }
 
-            visited.insert(node.to_string());
-            community.push(node.to_string());
 
-            if let Some(neighbors) = self.adjacency_list.get(node) {
-                for (neighbor, _) in neighbors {
-                    self.dfs_collect(neighbor, visited, community);
-                }
-            }
-        }
+   pub fn add_edge(&mut self, actor: &str, director: &str, rating: f64) {
+       let actor_index = self.add_node(actor);
+       let director_index = self.add_node(director);
+       self.graph.add_edge(actor_index, director_index, rating);
+   }
 
-        pub fn predict_collaboration(&self, actor: &str, director: &str) -> Option<f64> {
-            let actor_movies: HashSet<_> = self.adjacency_list.get(actor)?.iter().map(|(movie, _)| movie).collect();
-            let director_movies: HashSet<_> = self.adjacency_list.get(director)?.iter().map(|(movie, _)| movie).collect();
 
-            let shared_movies: Vec<_> = actor_movies.intersection(&director_movies).collect();
-
-            if shared_movies.is_empty() {
-                println!("No previous collaborations found between '{}' and '{}'.", actor, director);
-                return None;
-            }
-
-            let avg_rating: f64 = shared_movies.iter().filter_map(|&movie| {
-                self.adjacency_list.get(&movie)?.iter().find(|(node, _)| node.as_str() == actor || node.as_str() == director).map(|(_, weight)| *weight as f64)
-            }).sum::<f64>() / shared_movies.len() as f64;
-
-            println!("Previous collaborations between '{}' and '{}':", actor, director);
-            for movie in &shared_movies {
-                println!("- {}", movie);
-            }
-
-            println!("Average rating of shared movies: {:.2}", avg_rating);
-            Some(avg_rating)
-        }
-    }
+   pub fn predict_rating(&self, actor: &str, director: &str) -> Option<f64> {
+       let actor = actor.to_lowercase();
+       let director = director.to_lowercase();
+  
+       let actor_index = self.node_map.get(&actor)?;
+       let director_index = self.node_map.get(&director)?;
+  
+       let actor_ratings: Vec<f64> = self
+           .graph
+           .edges(*actor_index)
+           .map(|edge| *edge.weight())
+           .collect();
+  
+       let director_ratings: Vec<f64> = self
+           .graph
+           .edges(*director_index)
+           .map(|edge| *edge.weight())
+           .collect();
+  
+       let actor_avg = if !actor_ratings.is_empty() {
+           actor_ratings.iter().sum::<f64>() / actor_ratings.len() as f64
+       } else {
+           0.0
+       };
+  
+       let director_avg = if !director_ratings.is_empty() {
+           director_ratings.iter().sum::<f64>() / director_ratings.len() as f64
+       } else {
+           0.0
+       };
+  
+       Some((actor_avg + director_avg) / 2.0)
+   }
 }
