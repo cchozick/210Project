@@ -17,3 +17,46 @@ pub fn load_graph_from_csv(file_path: &str) -> (Graph<String, u32, Undirected>, 
 
     for (i, line) in reader.lines().enumerate() {
         let line = line.expect("Failed to read line");
+
+        let parts: Vec<&str> = line.split(',').collect();
+
+        if parts.len() <= 7 {
+            eprintln!("Skipping row {}: not enough columns", i + 1);
+            continue;
+        }
+
+        let directors = parts[6].trim();
+        let actors = parts[7].trim();
+
+        let directors_list: Vec<&str> = directors.split(';').collect();
+        let actors_list: Vec<&str> = actors.split(';').collect();
+
+        let mut participants = Vec::new();
+        for &name in directors_list.iter().chain(actors_list.iter()) {
+            let node = *name_to_node.entry(name.to_string()).or_insert_with(|| {
+                graph.add_node(name.to_string())
+            });
+            participants.push((name, node));
+        }
+
+        for (_, node) in &participants {
+            for (_, other_node) in &participants {
+                if node != other_node {
+                    let key = if *node < *other_node {
+                        (*node, *other_node)
+                    } else {
+                        (*other_node, *node)
+                    };
+                    *collaborations.entry(key).or_insert(0) += 1;
+
+                    if graph.find_edge(*node, *other_node).is_none() {
+                        graph.add_edge(*node, *other_node, 1);
+                    }
+                }
+            }
+        }
+    }
+
+    (graph, name_to_node)
+}
+
